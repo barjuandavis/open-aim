@@ -92,6 +92,9 @@ const STUDIO_LAUNCH_JS = fs.readFileSync(path.join(__dirname, "studio-launch.js"
 // Shooting error graph (shooting-error.js). The game's frame loop is served with one extra
 // call that hands every shot (its total spread and the spray part) to the graph.
 const SHOT_GRAPH_JS = fs.readFileSync(path.join(__dirname, "shooting-error.js"), "utf-8");
+// Crosshair movement and firing error (crosshair-error.js). The same frame loop also hands
+// the player (speed, grounded) to it every frame.
+const CROSSHAIR_ERROR_JS = fs.readFileSync(path.join(__dirname, "crosshair-error.js"), "utf-8");
 // One executeJavaScript call avoids Electron registering a did-stop-loading
 // listener for each UI script while the page is still loading.
 const UI_SCRIPTS = [
@@ -108,6 +111,7 @@ const UI_SCRIPTS = [
   ["LOBBY BAR", LOBBY_BAR_JS],
   ["STUDIO LAUNCH", STUDIO_LAUNCH_JS],
   ["SHOT GRAPH", SHOT_GRAPH_JS],
+  ["CROSSHAIR ERROR", CROSSHAIR_ERROR_JS], // after SHOT GRAPH: it wraps window.__aimShot
   ["RELEASE UPDATES", RELEASE_UPDATES_JS],
   ["VALORANT IMPORT", VALORANT_IMPORT_JS],
 ];
@@ -121,6 +125,8 @@ const UI_SCRIPT_BATCH = UI_SCRIPTS.map(([name, source]) =>
 const SHOT_LOOP_FILE = "/next/js/OkAdunfX.js";
 const SHOT_LOOP_FROM = 'xe.kind==="shot"&&(Kt.push(xe.tick*ve)';
 const SHOT_LOOP_TO = 'xe.kind==="shot"&&(window.__aimShot?.(xe),Kt.push(xe.tick*ve)';
+const MOVE_LOOP_FROM = "Ue?.update({fpGun:__aimADS.frame,";
+const MOVE_LOOP_TO = "window.__aimMove?.(ce.player),Ue?.update({fpGun:__aimADS.frame,";
 
 // The site's English translator garbles some Vietnamese strings. Serve a thin
 // wrapper in its place that applies translations.js first; the original module
@@ -331,7 +337,8 @@ function handle(req, res) {
     if (file) {
       const source = fs.readFileSync(file, "utf-8");
       if (!source.includes(SHOT_LOOP_FROM)) console.log("SHOT GRAPH: frame loop changed, graph gets no shots");
-      const body = Buffer.from(source.replace(SHOT_LOOP_FROM, SHOT_LOOP_TO), "utf-8");
+      if (!source.includes(MOVE_LOOP_FROM)) console.log("CROSSHAIR ERROR: frame loop changed, no movement error");
+      const body = Buffer.from(source.replace(SHOT_LOOP_FROM, SHOT_LOOP_TO).replace(MOVE_LOOP_FROM, MOVE_LOOP_TO), "utf-8");
       res.writeHead(200, { "Content-Type": "text/javascript", "Content-Length": body.length, "Cache-Control": "no-cache" });
       res.end(req.method === "HEAD" ? undefined : body);
       return;
