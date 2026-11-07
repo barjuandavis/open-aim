@@ -1,6 +1,7 @@
 // Desktop wrapper for the offline open-aim game.
 // Serves the site folder on 127.0.0.1:8000 exactly like aim_offline.py and
-// opens http://localhost:8000/aim in a window.
+// opens http://localhost:8000/aim in a window. If another program holds port 8000,
+// the server moves to a free port and the page keeps its localhost:8000 address.
 const { app, BrowserWindow, Menu, dialog, ipcMain, screen, session, shell } = require("electron");
 const fs = require("fs");
 const http = require("http");
@@ -186,6 +187,14 @@ try {
   shellSettings = { ...shellSettings, ...JSON.parse(fs.readFileSync(SHELL_FILE, "utf-8")) };
 } catch {}
 const VSYNC = shellSettings.vsync === true;
+
+// Player data belongs to the page's origin (localhost:8000), so the origin never
+// changes. When port 8000 is taken by another program, the server moves to a free port
+// (saved here as serverPort) and Chromium connects localhost:8000 to it instead.
+const SERVER_PORT = Number(shellSettings.serverPort) || PORT;
+if (SERVER_PORT !== PORT) {
+  app.commandLine.appendSwitch("host-resolver-rules", `MAP localhost:${PORT} ${HOST}:${SERVER_PORT}`);
+}
 
 // Performance: no vsync, discrete GPU, no throttling. Measured on a 240 Hz
 // display: vsync off renders at the full refresh rate (240 FPS), while adding
@@ -378,12 +387,28 @@ function handle(req, res) {
   res.end(req.method === "HEAD" ? undefined : data);
 }
 
-function startServer() {
+function startServer(port) {
   return new Promise((resolveStart, rejectStart) => {
     const server = http.createServer(handle);
     server.once("error", rejectStart);
-    server.listen(PORT, HOST, () => resolveStart(server));
+    server.listen(port, HOST, () => resolveStart(server));
   });
+}
+
+// Port in use: take a free one, save it, and relaunch so Chromium starts with the
+// mapping above. Only once per launch, so a failure can't loop.
+async function moveServerPort() {
+  if (process.argv.includes("--port-moved")) return false;
+  const probe = await startServer(0);
+  const port = probe.address().port;
+  await new Promise((done) => probe.close(done));
+  shellSettings.serverPort = port;
+  fs.writeFileSync(SHELL_FILE, JSON.stringify(shellSettings, null, 2));
+  console.log(`PORT: ${SERVER_PORT} in use, moving the server to ${port}`);
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE;
+  app.relaunch({ ...(exe ? { execPath: exe } : {}), args: [...process.argv.slice(1), "--port-moved"] });
+  app.exit(0);
+  return true;
 }
 
 function isLocal(url) {
@@ -548,11 +573,12 @@ app.whenReady().then(async () => {
     return;
   }
   try {
-    await startServer();
+    await startServer(SERVER_PORT);
   } catch (err) {
+    if (err && err.code === "EADDRINUSE" && (await moveServerPort())) return;
     const msg = err && err.code === "EADDRINUSE"
-      ? `Port ${PORT} is already in use by another program.\n\nClose it (for example a running aim_offline.py) and start AimTrainer again.`
-      : `Could not start the local game server on port ${PORT}:\n${err && err.message}`;
+      ? `Port ${SERVER_PORT} is already in use by another program.\n\nClose it (for example a running aim_offline.py) and start AimTrainer again.`
+      : `Could not start the local game server on port ${SERVER_PORT}:\n${err && err.message}`;
     dialog.showErrorBox("AimTrainer", msg);
     app.quit();
     return;
