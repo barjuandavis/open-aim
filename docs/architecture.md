@@ -43,6 +43,7 @@
 | `studio-store.js` | Saves your Studio drills so they show up in the lobby |
 | `studio-launch.js` | Starts a Studio drill in the game and brings you back to the Studio after |
 | `shooting-error.js` | The shooting error graph on the results screen |
+| `crosshair-error.js` | Crosshair movement and firing error in drills: the inner and outer lines spread while you move and spray |
 | `translations.js`, `english-fixes.js` | Proper English for the interface |
 | `test-maps.mjs` | Smoke test: loads several maps in a running app and reports errors |
 

@@ -46,6 +46,7 @@
       "studio-store.js",
       "studio-launch.js",
       "shooting-error.js",
+      "crosshair-error.js",
       "studio/**/*",
       "training-set.json",
       "translations.js",
