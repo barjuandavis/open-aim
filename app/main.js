@@ -146,6 +146,9 @@ const RELEASE_UPDATES_CSS = fs.readFileSync(path.join(__dirname, "release-update
 const SHOT_GRAPH_JS = fs.readFileSync(path.join(__dirname, "shooting-error.js"), "utf-8");
 // App name: "openVaim" in the lobby's top-left and the window title (brand-name.js).
 const BRAND_NAME_JS = fs.readFileSync(path.join(__dirname, "brand-name.js"), "utf-8");
+// Crosshair movement and firing error (crosshair-error.js). The same frame loop also hands
+// the player (speed, grounded) to it every frame.
+const CROSSHAIR_ERROR_JS = fs.readFileSync(path.join(__dirname, "crosshair-error.js"), "utf-8");
 // One executeJavaScript call avoids Electron registering a did-stop-loading
 // listener for each UI script while the page is still loading.
 const UI_SCRIPTS = [
@@ -176,6 +179,7 @@ const UI_SCRIPTS = [
   ["STUDIO LAUNCH", STUDIO_LAUNCH_JS],
   ["COMMUNITY WORKSHOP", COMMUNITY_WORKSHOP_JS],
   ["SHOT GRAPH", SHOT_GRAPH_JS],
+  ["CROSSHAIR ERROR", CROSSHAIR_ERROR_JS], // after SHOT GRAPH: it wraps window.__aimShot
   ["RELEASE UPDATES", RELEASE_UPDATES_JS],
   ["VALORANT IMPORT", VALORANT_IMPORT_JS],
   ["BRAND NAME", BRAND_NAME_JS],
@@ -206,6 +210,8 @@ function themedForBrowser(html) {
 const SHOT_LOOP_FILE = "/next/js/OkAdunfX.js";
 const SHOT_LOOP_FROM = 'xe.kind==="shot"&&(Kt.push(xe.tick*ve)';
 const SHOT_LOOP_TO = 'xe.kind==="shot"&&(window.__aimShot?.(xe),Kt.push(xe.tick*ve)';
+const MOVE_LOOP_FROM = "Ue?.update({fpGun:__aimADS.frame,";
+const MOVE_LOOP_TO = "window.__aimMove?.(ce.player),Ue?.update({fpGun:__aimADS.frame,";
 
 // The runtime translator (dictionary wrapper) was retired in batch 111 (6 Nov 2026): every served screen is direct
 // English in code and data; see previews/direct-english/batch-111-translator-retire/README.md.
@@ -792,7 +798,8 @@ async function handle(req, res) {
     if (file) {
       const source = fs.readFileSync(file, "utf-8");
       if (!source.includes(SHOT_LOOP_FROM)) console.log("SHOT GRAPH: frame loop changed, graph gets no shots");
-      const body = Buffer.from(source.replace(SHOT_LOOP_FROM, SHOT_LOOP_TO), "utf-8");
+      if (!source.includes(MOVE_LOOP_FROM)) console.log("CROSSHAIR ERROR: frame loop changed, no movement error");
+      const body = Buffer.from(source.replace(SHOT_LOOP_FROM, SHOT_LOOP_TO).replace(MOVE_LOOP_FROM, MOVE_LOOP_TO), "utf-8");
       res.writeHead(200, { "Content-Type": "text/javascript", "Content-Length": body.length, "Cache-Control": "no-cache" });
       res.end(req.method === "HEAD" ? undefined : body);
       return;
